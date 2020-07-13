@@ -59,50 +59,14 @@ schema() {
         unix2dos --quiet --newfile ./src/tf-proto.js ./src/tf-proto.js
     fi
     bold "tflite schema"
-    case "${OSTYPE}" in
-        linux*)
-            flatc_version=$(curl -s https://api.github.com/repos/google/flatbuffers/releases/latest | grep tag_name | cut -f 2 -d : | cut -f 2 -d '"')
-            flatc_dir=./third_party/bin/flatbuffers/${flatc_version}
-            if [ ! -f "${flatc_dir}/flatc" ]; then
-                mkdir -p "${flatc_dir}"
-                pushd "${flatc_dir}" > /dev/null
-                curl -sL https://github.com/google/flatbuffers/archive/${flatc_version}.tar.gz | tar zx --strip-components 1
-                cmake -G "Unix Makefiles" . &> /dev/null
-                make > /dev/null
-                popd > /dev/null
-            fi
-            export PATH=${flatc_dir}:${PATH}
-            ;;
-        darwin*)
-            brew list flatbuffers > /dev/null 2>&1 || brew install flatbuffers > /dev/null
-            ;;
-        msys*)
-            flatc_version=$(curl -s https://api.github.com/repos/google/flatbuffers/releases/latest | grep tag_name | cut -f 2 -d : | cut -f 2 -d '"')
-            flatc_dir=./third_party/bin/flatbuffers/${flatc_version}
-            if [ ! -f "${flatc_dir}/flatc.exe" ]; then
-                mkdir -p "${flatc_dir}"
-                pushd "${flatc_dir}" > /dev/null
-                curl -sL -O https://github.com/google/flatbuffers/releases/download/${flatc_version}/flatc_windows.zip
-                unzip flatc_windows.zip > /dev/null
-                popd > /dev/null
-            fi
-            export PATH=${flatc_dir}:${PATH}
-            ;;
-    esac
     [[ $(grep -U $'\x0D' ./src/tflite-schema.js) ]] && crlf=1
-    temp=$(mktemp -d)
-    sed 's/namespace tflite;/namespace tflite_schema;/g' < ./third_party/src/tf/tensorflow/lite/schema/schema.fbs > ${temp}/tflite_schema.fbs
-    sed 's/namespace tflite;/namespace tflite_metadata_schema;/g' < ./third_party/src/tflite-support/tensorflow_lite_support/metadata/metadata_schema.fbs > ${temp}/tflite_metadata_schema.fbs
-    flatc --no-js-exports --js -o ${temp} ${temp}/tflite_schema.fbs
-    flatc --no-js-exports --js -o ${temp} ${temp}/tflite_metadata_schema.fbs
-    mv ${temp}/tflite_schema_generated.js ./src/tflite-schema.js
-    cat ${temp}/tflite_metadata_schema_generated.js >> ./src/tflite-schema.js
-    rm -rf ${temp}
-    cat <<EOT >> ./src/tflite-schema.js
-if (typeof module !== 'undefined' && typeof module.exports === 'object') {
-  module.exports = { tflite_schema: tflite_schema, tflite_metadata_schema: tflite_metadata_schema };
-}
-EOT
+    temp1=$(mktemp -d)
+    temp2=$(mktemp -d)
+    node ./tools/flatc.js --root tflite --out ./src/tflite-schema.js ./third_party/src/tf/tensorflow/lite/schema/schema.fbs
+    node ./tools/flatc.js --root tflite --out ${temp1}/tflite-metadata-schema.js ./third_party/src/tflite-support/tensorflow_lite_support/metadata/metadata_schema.fbs
+    sed "s/const \$root = flatbuffers.get('tflite');//g" < ${temp1}/tflite-metadata-schema.js >> ${temp2}/tflite-metadata-schema.js
+    cat ${temp2}/tflite-metadata-schema.js >> ./src/tflite-schema.js
+    rm -rf ${temp1} ${temp2}
     if [[ -n ${crlf} ]]; then
         unix2dos --quiet --newfile ./src/tflite-schema.js ./src/tflite-schema.js
     fi
