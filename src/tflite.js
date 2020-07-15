@@ -391,42 +391,20 @@ tflite.Node = class {
                         const schema = metadata.attribute(this.type, 'custom');
                         this._attributes.push(new tflite.Attribute(schema, format, 'custom', custom));
                     }
-                    const builtinOptionsType = node.builtinOptionsType();
-                    if (builtinOptionsType !== 0) {
-                        const builtinOptionsTypeName = tflite.schema[tflite.Utility.enum('BuiltinOptions', node.builtinOptionsType())];
-                        if (builtinOptionsTypeName) {
-                            const options = node.builtinOptions(Reflect.construct(builtinOptionsTypeName, []));
-                            if (options) {
-                                const names = new Set(Object.keys(Object.getPrototypeOf(options)).filter((name) => name !== '__init'));
-                                const arrayNames = new Set();
-                                for (const name of new Set(names)) {
-                                    if (names.has(name + 'Array') && names.has(name + 'Length')) {
-                                        names.delete(name + 'Array');
-                                        names.delete(name + 'Length');
-                                        arrayNames.add(name);
-                                    }
+                    const options = node.builtin_options;
+                    if (options) {
+                        for (const name of Object.keys(options)) {
+                            const value = options[name];
+                            if (name === 'fused_activation_function' && value !== 0) {
+                                const activationFunctionMap = { 1: 'Relu', 2: 'ReluN1To1', 3: 'Relu6', 4: 'Tanh', 5: 'SignBit' };
+                                if (!activationFunctionMap[value]) {
+                                    throw new tflite.Error("Unknown activation funtion index '" + JSON.stringify(value) + "'.");
                                 }
-                                for (const camelCaseName of names) {
-                                    if (options[camelCaseName] && typeof options[camelCaseName] == 'function') {
-                                        const value = arrayNames.has(camelCaseName) ? Array.from(options[camelCaseName + 'Array']() || []) : options[camelCaseName]();
-                                        if (camelCaseName === 'fusedActivationFunction' && value !== 0) {
-                                            const activationFunctionMap = { 1: 'Relu', 2: 'ReluN1To1', 3: 'Relu6', 4: 'Tanh', 5: 'SignBit' };
-                                            if (!activationFunctionMap[value]) {
-                                                throw new tflite.Error("Unknown activation funtion index '" + JSON.stringify(value) + "'.");
-                                            }
-                                            const type = activationFunctionMap[value];
-                                            this._chain = [ new tflite.Node(metadata, format, null, { name: type }, null, []) ];
-                                        }
-                                        let name = '';
-                                        const lower = camelCaseName.toLowerCase();
-                                        for (let i = 0; i < camelCaseName.length; i++) {
-                                            name += (camelCaseName[i] == lower[i]) ? camelCaseName[i] : ('_' + lower[i]);
-                                        }
-                                        const schema = metadata.attribute(this.type, name);
-                                        this._attributes.push(new tflite.Attribute(schema, format, name, value));
-                                    }
-                                }
+                                const type = activationFunctionMap[value];
+                                this._chain = [ new tflite.Node(metadata, format, null, { name: type }, null, []) ];
                             }
+                            const schema = metadata.attribute(this.type, name);
+                            this._attributes.push(new tflite.Attribute(schema, format, name, value));
                         }
                     }
                     break;
